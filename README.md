@@ -1,4 +1,4 @@
-idl2json
+idl2json / json2idl
 ========
 
 Reads [Candid](https://github.com/dfinity/candid) textual values from `stdin` and emits them as json values on `stdout`.
@@ -13,6 +13,12 @@ There is sample output to play with without dfx:
 
 ```
 <samples/proposal.idl ./target/debug/idl2json
+```
+
+Reads JSON values from `stdin` and emits Candid textual values on `stdout`:
+
+```
+echo '{"canister_creation_cycles_cost":999}' | ./target/debug/json2idl --did samples/internet_identity.did --typ InternetIdentityInit
 ```
 
 # Install

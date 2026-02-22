@@ -17,33 +17,30 @@ use candid_parser::{
 };
 use clap::Parser;
 use idl2json::{
-    idl2json, idl2json_with_weak_names, idl_args2json_with_weak_names, polyfill, BytesFormat,
-    Idl2JsonOptions,
+    idl2json, idl2json_with_weak_names, idl_args2json_with_weak_names, json2idl_with_type,
+    json2idl_with_type_name, json_args2idl_with_types, polyfill, BytesFormat, Idl2JsonOptions,
 };
 use std::{path::PathBuf, str::FromStr};
+
+fn load_did_files(dids: &[PathBuf]) -> anyhow::Result<Vec<IDLProg>> {
+    dids.iter()
+        .map(|did| {
+            let did_as_str = std::fs::read_to_string(did)
+                .with_context(|| anyhow!("Could not read did file '{}'.", did.display()))?;
+            IDLProg::from_str(&did_as_str)
+                .with_context(|| anyhow!("Failed to parse did file '{}'", did.display()))
+        })
+        .collect()
+}
 
 /// Reads IDL from stdin, writes JSON to stdout.
 pub fn main(args: &Args, idl_str: &str) -> anyhow::Result<String> {
     let idl_args: IDLArgs = parse_idl_args(idl_str).with_context(|| anyhow!("Malformed input"))?;
-    let idl2json_options = {
-        let progs: anyhow::Result<Vec<IDLProg>> = args
-            .did
-            .iter()
-            .map(|did| {
-                let did_as_str = std::fs::read_to_string(did)
-                    .with_context(|| anyhow!("Could not read did file '{}'.", did.display()))?;
-                IDLProg::from_str(&did_as_str)
-                    .with_context(|| anyhow!("Failed to parse did file '{}'", did.display()))
-            })
-            .collect();
-        let progs = progs?;
-
-        Idl2JsonOptions {
-            prog: progs,
-            bytes_as: args.bytes_as,
-            compact: args.compact,
-            ..Idl2JsonOptions::default()
-        }
+    let idl2json_options = Idl2JsonOptions {
+        prog: load_did_files(&args.did)?,
+        bytes_as: args.bytes_as,
+        compact: args.compact,
+        ..Idl2JsonOptions::default()
     };
     // Decide what to do
     if args.init {
@@ -78,6 +75,45 @@ pub fn main(args: &Args, idl_str: &str) -> anyhow::Result<String> {
         }
     } else {
         convert_all(&idl_args, &None, &idl2json_options)
+    }
+}
+
+/// Reads JSON from stdin, writes candid to stdout.
+pub fn main_json2idl(args: &Json2IdlArgs, json_str: &str) -> anyhow::Result<String> {
+    let did_prog = load_did_files(&args.did)?
+        .into_iter()
+        .next()
+        .unwrap_or(IDLProg {
+            decs: vec![],
+            actor: None,
+        });
+
+    if args.init {
+        let init_arg_types = polyfill::idl_prog::get_init_arg_type(&did_prog)
+            .context("Failed to get the service argument from the did file.")?;
+        json_args2idl_with_types(did_prog, &init_arg_types, json_str)
+    } else if let Some(typ) = &args.typ {
+        if typ.trim().starts_with('(') {
+            let idl_types = IDLTypes::from_str(typ).context("Failed to parse type")?;
+            json_args2idl_with_types(did_prog, &idl_types, json_str)
+        } else {
+            let trimmed_typ = typ.trim();
+            if !trimmed_typ.contains(char::is_whitespace)
+                && !trimmed_typ.contains('{')
+                && !trimmed_typ.contains('}')
+                && !trimmed_typ.contains(':')
+                && !trimmed_typ.contains(';')
+            {
+                json2idl_with_type_name(did_prog, trimmed_typ, json_str)
+            } else {
+                let idl_type = IDLType::from_str(trimmed_typ).context("Failed to parse type")?;
+                json2idl_with_type(did_prog, &idl_type, json_str)
+            }
+        }
+    } else {
+        Err(anyhow!(
+            "Please specify --typ or --init when converting JSON to IDL."
+        ))
     }
 }
 
@@ -133,4 +169,19 @@ pub struct Args {
     /// Print compact output
     #[clap(short, long)]
     compact: bool,
+}
+
+/// Converts JSON on stdin to Candid on stdout.
+#[derive(Parser, Debug, Default)]
+#[clap(name("json2idl"), version = concat!(env!("CARGO_PKG_VERSION"), "\ncandid ", env!("CARGO_CANDID_VERSION")))]
+pub struct Json2IdlArgs {
+    /// A .did file containing type definitions
+    #[clap(short, long)]
+    did: Vec<PathBuf>,
+    /// The name of a type in the provided .did file or a candid type literal
+    #[clap(short, long)]
+    typ: Option<String>,
+    /// Use the service init argument type from the did file
+    #[clap(short, long, requires("did"))]
+    init: bool,
 }

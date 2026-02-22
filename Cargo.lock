@@ -482,6 +482,7 @@ dependencies = [
 name = "idl2json"
 version = "0.10.1"
 dependencies = [
+ "anyhow",
  "candid",
  "candid_parser",
  "clap",
@@ -489,7 +490,9 @@ dependencies = [
  "num-bigint",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
+ "yaml2candid",
 ]
 
 [[package]]

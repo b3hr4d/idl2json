@@ -8,10 +8,14 @@
 mod bytes;
 pub mod candid_types;
 pub mod polyfill;
+mod reverse_conversion;
 mod typed_conversion;
 mod untyped_conversion;
 
 use candid_parser::types::IDLProg;
+pub use reverse_conversion::{
+    json2idl_with_type, json2idl_with_type_name, json_args2idl_with_types,
+};
 pub use serde_json::Value as JsonValue;
 pub use typed_conversion::{idl2json_with_weak_names, idl_args2json_with_weak_names};
 pub use untyped_conversion::{idl2json, idl_args2json};

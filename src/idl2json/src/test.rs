@@ -2,14 +2,15 @@
 #![allow(clippy::panic)]
 use crate::{
     candid_types::internal_candid_type_to_idl_type, idl2json, idl2json_with_weak_names,
-    BytesFormat, Idl2JsonOptions, JsonValue,
+    json2idl_with_type, json2idl_with_type_name, json_args2idl_with_types, BytesFormat,
+    Idl2JsonOptions, JsonValue,
 };
 use candid::{
     types::internal::Label, types::value::IDLValue, CandidType, Decode, Deserialize, IDLArgs,
 };
 use candid_parser::{
     parse_idl_args,
-    types::{IDLType, PrimType, TypeField},
+    types::{IDLProg, IDLType, IDLTypes, PrimType, TypeField},
 };
 use serde::Serialize;
 use std::fs;
@@ -388,4 +389,55 @@ fn types_should_be_represented_correctly() {
             );
         }
     }
+}
+
+#[test]
+fn json2idl_with_named_type_should_work() {
+    let did_str = fs::read_to_string(format!(
+        "{}/../../samples/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        "internet_identity.did"
+    ))
+    .expect("Could not read sample did");
+    let prog: IDLProg = did_str.parse().expect("Could not parse sample did");
+    let json = r#"{"canister_creation_cycles_cost": 999}"#;
+    let candid = json2idl_with_type_name(prog, "InternetIdentityInit", json)
+        .expect("Failed to convert json to candid");
+    assert_eq!(
+        "record {\n  archive_module_hash = null;\n  assigned_user_number_range = null;\n  canister_creation_cycles_cost = opt (999 : nat64);\n}",
+        candid
+    );
+}
+
+#[test]
+fn json2idl_with_literal_type_should_work() {
+    let prog = IDLProg {
+        decs: vec![],
+        actor: None,
+    };
+    let typ: IDLType = "vec nat8".parse().expect("Could not parse type");
+    let json = r#""0xA1B2""#;
+    let candid = json2idl_with_type(prog, &typ, json).expect("Failed to convert json to candid");
+    assert_eq!("blob \"\\a1\\b2\"", candid);
+}
+
+#[test]
+fn json2idl_args_with_types_should_work() {
+    let did_str = fs::read_to_string(format!(
+        "{}/../../samples/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        "internet_identity.did"
+    ))
+    .expect("Could not read sample did");
+    let prog: IDLProg = did_str.parse().expect("Could not parse sample did");
+    let idl_types: IDLTypes = "(opt InternetIdentityInit)"
+        .parse()
+        .expect("Could not parse idl types");
+    let json = r#"[[{"canister_creation_cycles_cost":6974}]]"#;
+    let candid = json_args2idl_with_types(prog, &idl_types, json)
+        .expect("Failed to convert json args to candid");
+    assert_eq!(
+        "(\n  opt record {\n    archive_module_hash = null;\n    assigned_user_number_range = null;\n    canister_creation_cycles_cost = opt (6_974 : nat64);\n  },\n)",
+        candid
+    );
 }

@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 
-use super::{main, Args, BytesFormat};
+use super::{main, main_json2idl, Args, BytesFormat, Json2IdlArgs};
 use anyhow::anyhow;
 use std::path::Path;
 
@@ -185,5 +185,50 @@ fn error_handling_should_be_correct() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn json2idl_conversion_with_options_should_be_correct() {
+    #[derive(Debug)]
+    struct TestVector {
+        stdin: &'static str,
+        args: Json2IdlArgs,
+        stdout: &'static str,
+    }
+    let vectors = [
+        TestVector {
+            stdin: r#"{"canister_creation_cycles_cost":999}"#,
+            args: Json2IdlArgs {
+                did: vec![sample_file!("internet_identity.did")],
+                typ: Some("InternetIdentityInit".to_string()),
+                init: false,
+            },
+            stdout: "record {\n  archive_module_hash = null;\n  assigned_user_number_range = null;\n  canister_creation_cycles_cost = opt (999 : nat64);\n}",
+        },
+        TestVector {
+            stdin: r#""0xA1B2""#,
+            args: Json2IdlArgs {
+                did: vec![],
+                typ: Some("vec nat8".to_string()),
+                init: false,
+            },
+            stdout: "blob \"\\a1\\b2\"",
+        },
+        TestVector {
+            stdin: r#"[[{"canister_creation_cycles_cost":6974}]]"#,
+            args: Json2IdlArgs {
+                did: vec![sample_file!("internet_identity.did")],
+                typ: None,
+                init: true,
+            },
+            stdout: "(\n  opt record {\n    archive_module_hash = null;\n    assigned_user_number_range = null;\n    canister_creation_cycles_cost = opt (6_974 : nat64);\n  },\n)",
+        },
+    ];
+    for vector in vectors {
+        let out = main_json2idl(&vector.args, vector.stdin)
+            .map_err(|e| anyhow!("Failed to parse: {} due to: {e}", vector.stdin))
+            .unwrap();
+        assert_eq!(vector.stdout, &out)
     }
 }

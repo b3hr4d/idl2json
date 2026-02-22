@@ -18,6 +18,10 @@ keywords = ["internet-computer", "idl", "candid", "dfinity", "json"]
 name = "idl2json"
 path = "src/main.rs"
 
+[[bin]]
+name = "json2idl"
+path = "src/json2idl.rs"
+
 [dependencies]
 anyhow = "1"
 candid = { workspace = true }
